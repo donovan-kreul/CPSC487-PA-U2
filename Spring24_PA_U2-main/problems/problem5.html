@@ -20,12 +20,87 @@
 </head>
 <body>
 <script type="module">
-    import {ThreeEngine} from "../js/utils/utils_three.js";
+    import {get_default_lil_gui, ThreeEngine, refresh_displays} from "../js/utils/utils_three.js";
 
     // todo: recreate this visualization, demonstrating your understanding of SE(2)
     // todo: https://yale-cpsc-487-587-internal-djrakita-c95fa6c3239a481a48d29a6b0fd.gitlab.io/html/visualizations/point_mapping_2D_direct_isometry.html
     // todo: (no need to draw the unit circle here)
     // todo: or, feel free to come up with any visualization here that demonstrates your understanding of SE(2)
+
+    let engine = ThreeEngine.new_default_2d();
+    let settings = {
+        draw_points: true,
+        draw_wireframe: true,
+        draw_mesh: false,
+        point_size: 0.02,
+        theta: 0,
+        tx: 0,
+        ty: 0,
+    }
+
+    let actions = {
+        reset_matrix: function() {
+            settings.theta = 0;
+            settings.tx = 0;
+            settings.ty = 0;
+            refresh_displays(gui);
+        }
+    };
+
+    let gui = get_default_lil_gui();
+    gui.add(settings, "draw_points").name("Draw Points");
+    gui.add(settings, "draw_wireframe").name("Draw Wireframe");
+    gui.add(settings, "draw_mesh").name("Draw Mesh");
+    gui.add(settings, "point_size", 0.001, 0.03).name("Point Size");
+
+    let folder = gui.addFolder("Isometry Controls");
+    folder.add(settings, "tx", -2, 2).name("Translation X");
+    folder.add(settings, "ty", -2, 2).name("Translation Y");
+    folder.add(settings, "theta", -Math.PI, Math.PI).name("Rotation Angle");
+    folder.add(actions, "reset_matrix").name("Reset");
+    // folder.add(settings, "discriminant").name("Discriminant").disable();
+
+    // add actual shape object
+    engine.add_standard2Dshape_as_mesh_object(0x00eeff);
+    engine.toggle_mesh_object_visibility(0);
+    engine.set_mesh_object_wireframe_visibility(0, settings.draw_wireframe);
+
+    // get mesh points
+    let standard_points = engine.get_local_vertex_positions_of_mesh_object(0);
+    let wireframe_points = engine.get_local_vertex_positions_of_mesh_object_wireframe(0);
+
+    function apply_SE2(matrix, translation, vector) {
+        let result = [];
+        // result of applying rotation matrix then translation
+        result.push([matrix[0][0]*vector[0][0] + matrix[0][1]*vector[1][0] + translation[0][0]]);
+        result.push([matrix[1][0]*vector[0][0] + matrix[1][1]*vector[1][0] + translation[1][0]]);
+        return result;
+    }
+
+    engine.animation_loop(() => {
+        // get current SE2 matrix from current theta value
+        let m = [[Math.cos(settings.theta), -Math.sin(settings.theta)], [Math.sin(settings.theta), Math.cos(settings.theta)]];
+        let t = [[settings.tx], [settings.ty]];
+
+        // map points using SE2 matrix
+        let new_standard_points = standard_points.map(old_point => apply_SE2(m, t, old_point));
+        let new_wireframe_points = wireframe_points.map(old_point => apply_SE2(m, t, old_point));
+
+        engine.update_vertex_positions_of_mesh_object(0, new_standard_points);
+        engine.update_vertex_positions_of_mesh_object_wireframe(0, new_wireframe_points);
+
+        if (settings.draw_points) {
+            new_standard_points.forEach(pt => engine.draw_debug_sphere(pt, settings.point_size, 0xeeee00));
+        }
+
+        // show operation on standard basis vectors
+        engine.draw_debug_vector(t, apply_SE2(m, t, [[1], [0]]), 0.03, 0.15, 0xff0000, 0.9);
+        engine.draw_debug_vector(t, apply_SE2(m, t, [[0], [1]]), 0.03, 0.15, 0x00ff00, 0.9);
+
+        engine.mesh_objects[0].visible = settings.draw_mesh;
+        engine.set_mesh_object_wireframe_visibility(0, settings.draw_wireframe);
+        refresh_displays(gui);
+    });
 
 </script>
 </body>

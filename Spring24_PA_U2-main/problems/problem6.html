@@ -20,12 +20,126 @@
 </head>
 <body>
 <script type="module">
-    import {ThreeEngine} from "../js/utils/utils_three.js";
+    import {get_default_lil_gui, ThreeEngine, refresh_displays} from "../js/utils/utils_three.js";
 
     // todo: recreate this visualization, demonstrating your understanding of displacement-based distance in SE(2)
     // todo: https://yale-cpsc-487-587-internal-djrakita-c95fa6c3239a481a48d29a6b0fd.gitlab.io/html/visualizations/SE2_distance2.html
     // todo: make sure you are using the displacement-based distance!
     // todo: or, feel free to come up with any visualization here that demonstrates your understanding of SE(2) distance
+
+    let engine = ThreeEngine.new_default_2d();
+    let settings = {
+        theta1: 0,
+        tx1: 0,
+        ty1: 0,
+        theta2: 0,
+        tx2: 0,
+        ty2: 0,
+        dist: 0,
+    }
+
+    let actions = {
+        reset1: function() {
+            settings.theta1 = 0;
+            settings.tx1 = 0;
+            settings.ty1 = 0;
+            refresh_displays(gui);
+        },
+        reset2: function() {
+            settings.theta2 = 0;
+            settings.tx2 = 0;
+            settings.ty2 = 0;
+            refresh_displays(gui);
+        }
+    };
+
+    let gui = get_default_lil_gui();
+    gui.add(settings, "theta1", -6.28, 6.28).name("Theta1");
+    gui.add(settings, "tx1", -2, 2).name("tx1");
+    gui.add(settings, "ty1", -2, 2).name("ty1");
+    gui.add(actions, "reset1").name("reset1");
+    gui.add(settings, "theta2", -6.28, 6.28).name("Theta2");
+    gui.add(settings, "tx2", -2, 2).name("tx2");
+    gui.add(settings, "ty2", -2, 2).name("ty2");
+    gui.add(actions, "reset2").name("reset2");
+    gui.add(settings, "dist").name("disp-based dist").disable();
+
+    function apply_SE2(matrix, translation, vector) {
+        let result = [];
+        // result of applying rotation matrix then translation
+        result.push([matrix[0][0]*vector[0][0] + matrix[0][1]*vector[1][0] + translation[0][0]]);
+        result.push([matrix[1][0]*vector[0][0] + matrix[1][1]*vector[1][0] + translation[1][0]]);
+        return result;
+    }
+
+    function multiply_2x2_matrix_and_2x1_vector(matrix, vector) {
+        let result = [];
+        result.push([matrix[0][0]*vector[0][0] + matrix[0][1]*vector[1][0]]);
+        result.push([matrix[1][0]*vector[0][0] + matrix[1][1]*vector[1][0]]);
+        return result;
+    }
+
+    function SE2_log(r, t) {
+        let a1 = Math.atan2(r[1][0], r[0][0]);
+        console.log(a1);
+
+        let p, q;
+        if (Math.abs(a1) < 0.0001) {
+            p = 1 - a1**2 / 6.0 + a1**4 / 120.0;
+            q = a1 / 2.0 - a1**3 / 24.0 + a1**5 / 720.0;
+        } else {
+            p = Math.sin(a1) / a1;
+            q = (1 - Math.cos(a1)) / a1;
+        }
+
+        let a2 = (p * t[0][0] + q * t[1][0]) / (p**2 + q**2);
+        let a3 = (-q * t[0][0] + p * t[1][0]) / (p**2 + q**2);
+
+        // returning just these values, for convenience
+        return [a1, a2, a3];
+    }
+
+    function find_disp_based_dist(r1, t1, r2, t2) {
+        // compute R^T and R^T(-t) for m1 to get m1^(-1)
+        let r1inv = [[r1[0][0], r1[1][0]],
+                    [r1[0][1], r1[1][1]]];
+        let t1inv = multiply_2x2_matrix_and_2x1_vector(r1inv, [[-t1[0][0]], [-t1[1][0]]]);
+
+        console.log(r2);
+        // find the displacement = m1inv * m2
+        // apologies for the spaghetti matrix multiplication
+        let r_disp = [[r1inv[0][0] * r2[0][0] + r1inv[0][1] * r2[1][0],
+                        r1inv[0][0] * r2[0][1] + r1inv[0][1] * r2[1][1]],
+                    [r1inv[1][0] * r2[0][0] + r1inv[1][1] * r2[1][0],
+                        r1inv[1][0] * r2[0][1] + r1inv[1][1] * r2[1][1]]];
+        let t_disp = apply_SE2(r1inv, t1inv, t2);
+
+        // apply log map to get coeffs for se2 matrix
+        let u = SE2_log(r_disp, t_disp);
+
+        // compute norm of se2 element as a vector
+        return Math.sqrt((u[0]**2) + (u[1]**2) + (u[2]**2));
+    }
+
+    engine.animation_loop(() => {
+        // get current SE2 matrices from current theta values
+        let r1 = [[Math.cos(settings.theta1), -Math.sin(settings.theta1)], [Math.sin(settings.theta1), Math.cos(settings.theta1)]];
+        let t1 = [[settings.tx1], [settings.ty1]];
+
+        let r2 = [[Math.cos(settings.theta2), -Math.sin(settings.theta2)], [Math.sin(settings.theta2), Math.cos(settings.theta2)]];
+        let t2 = [[settings.tx2], [settings.ty2]];
+
+        // show operations on standard basis vectors
+        engine.draw_debug_vector(t1, apply_SE2(r1, t1, [[1], [0]]), 0.03, 0.15, 0xdd0000, 0.9);
+        engine.draw_debug_vector(t1, apply_SE2(r1, t1, [[0], [1]]), 0.03, 0.15, 0x00dd00, 0.9);
+
+        engine.draw_debug_vector(t2, apply_SE2(r2, t2, [[1], [0]]), 0.03, 0.15, 0x0000ff, 0.9);
+        engine.draw_debug_vector(t2, apply_SE2(r2, t2, [[0], [1]]), 0.03, 0.15, 0xcc4400, 0.9);
+
+        // compute disp-based distance
+        settings.dist = find_disp_based_dist(r1, t1, r2, t2);
+        refresh_displays(gui);
+    });
 
 </script>
 </body>
