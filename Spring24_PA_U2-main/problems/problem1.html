@@ -27,11 +27,20 @@
     // todo:  The sphere should have a radius of 0.04 and can be any color/ opacity you want.
 
     let engine = ThreeEngine.new_default_3d();
+    let settings = {
+        x: 0,
+        y: 0,
+        z: 0,
+    }
 
     let gui = get_default_lil_gui();
+    gui.add(settings, 'x', -2, 2).name("x");
+    gui.add(settings, 'y', -2, 2).name("y");
+    gui.add(settings, 'z', -2, 2).name("z");
 
     engine.animation_loop(() => {
-
+        let center_point = [settings.x, settings.y, settings.z]
+        engine.draw_debug_sphere(center_point, 0.04, 0x0000ff, 0.8);
     });
 
 </script>
